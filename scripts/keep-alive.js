@@ -13,7 +13,7 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 async function main() {
   // Replace "books" with a table that exists in your project.
-  const { error,data } = await supabase
+  const { error } = await supabase
     .from("books")
     .select("*")
     .limit(1);
@@ -21,7 +21,7 @@ async function main() {
   if (error) {
     throw new Error(`Supabase query failed: ${error.message}`);
   }
-  console.log(data)
+  
   console.log("Supabase database query succeeded.");
 }
 
