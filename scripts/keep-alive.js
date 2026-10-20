@@ -11,21 +11,36 @@ if (!supabaseUrl || !supabaseKey) {
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-async function main() {
-  // Replace "books" with a table that exists in your project.
-  const { error } = await supabase
-    .from("books")
-    .select("*")
-    .limit(1);
+const sendEmail = require("./send-email");
 
-  if (error) {
-    throw new Error(`Supabase query failed: ${error.message}`);
+async function main() {
+  try {
+    const { error } = await supabase.from("books").select("*").limit(1);
+
+    if (error) {
+      throw new Error(`Supabase query failed: ${error.message}`);
+    }
+
+    console.log("Supabase database query succeeded.");
+
+    await sendEmail({
+      status: "SUCCESS",
+      message: "The health check completed successfully.",
+      details: "Supabase responded successfully.",
+    });
+  } catch (error) {
+    try {
+      await sendEmail({
+        status: "FAILED",
+        message: "The health check failed.",
+        details: String(error.message || error),
+      });
+    } catch {
+      console.error("Failed to send email:", error);
+    }
+
+    process.exitCode = 1;
   }
-  
-  console.log("Supabase database query succeeded.");
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+main();
