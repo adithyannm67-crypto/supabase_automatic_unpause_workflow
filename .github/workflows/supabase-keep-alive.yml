@@ -21,6 +21,9 @@ jobs:
       - name: Install Supabase client
         run: npm install @supabase/supabase-js
 
+      - name: Install Emailjs
+        run: npm install @emailjs/nodejs
+
       - name: Check database activity
         run: node scripts/keep-alive.js
         env:
