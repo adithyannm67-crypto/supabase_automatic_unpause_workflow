@@ -18,7 +18,7 @@ async function sendEmail({ status, message, details }) {
                 }),
                 details,
                 workflow_url:
-                    `https://github.com/${process.env.GITHUB_REPOSITORY}/actions`
+                    `https://github.com/${process.env.NAME_OF_GITHUB_REPOSITORY}/actions`
             },
             {
                 publicKey: process.env.EMAILJS_PUBLIC_KEY,
