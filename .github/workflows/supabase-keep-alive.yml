@@ -2,36 +2,29 @@ name: Supabase Keep Alive
 
 on:
   schedule:
-    - cron: "30 2 * * 0,4" 
+    - cron: "17 0,8,16 * * *"
   workflow_dispatch: # Allow manual testing
+
+permissions:
+  contents: read
 
 jobs:
   keep-alive:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-
-      - name: Install Supabase client
-        run: npm install @supabase/supabase-js
-
-      - name: Install Emailjs
-        run: npm install @emailjs/nodejs
-
       - name: Check database activity
-        run: node scripts/keep-alive.js
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          EMAILJS_PUBLIC_KEY: ${{ secrets.EMAILJS_PUBLIC_KEY }}
-          EMAILJS_PRIVATE_KEY: ${{ secrets.EMAILJS_PRIVATE_KEY }}
-          EMAILJS_SERVICE_ID: ${{ secrets.EMAILJS_SERVICE_ID }}
-          EMAILJS_TEMPLATE_ID: ${{ secrets.EMAILJS_TEMPLATE_ID }}
-          NAME_OF_GITHUB_REPOSITORY: ${{ secrets.NAME_OF_GITHUB_REPOSITORY }}
-
+        run: |
+          set -euo pipefail
+          BASE="${SUPABASE_URL%/}"
+          code=$(curl --silent --show-error --max-time 20 \
+            --retry 3 --retry-all-errors \
+            -o /dev/null -w '%{http_code}' \
+            "$BASE/rest/v1/books?select=*&limit=1" \
+            -H "apikey: $SUPABASE_ANON_KEY")
+          echo "HTTP status: $code"
+          [ "$code" = "200" ]
