@@ -1,9 +1,11 @@
+
 name: Supabase Keep Alive
 
 on:
   schedule:
     - cron: "17 0,8,16 * * *"
-  workflow_dispatch: # Allow manual testing
+
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -15,16 +17,105 @@ jobs:
 
     steps:
       - name: Check database activity
+        id: database
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+
         run: |
-          set -euo pipefail
+          set -uo pipefail
+
           BASE="${SUPABASE_URL%/}"
-          code=$(curl --silent --show-error --max-time 20 \
+
+          if code=$(curl --silent --show-error --max-time 20 \
             --retry 3 --retry-all-errors \
             -o /dev/null -w '%{http_code}' \
             "$BASE/rest/v1/books?select=*&limit=1" \
-            -H "apikey: $SUPABASE_ANON_KEY")
-          echo "HTTP status: $code"
-          [ "$code" = "200" ]
+            -H "apikey: $SUPABASE_ANON_KEY"); then
+
+            echo "HTTP status: $code"
+
+            if [ "$code" = "200" ]; then
+              echo "status=SUCCESS" >> "$GITHUB_OUTPUT"
+              echo "details=Database connection successful. HTTP $code" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          else
+            code="CONNECTION_ERROR"
+          fi
+
+          echo "status=FAILED" >> "$GITHUB_OUTPUT"
+          echo "details=Database request failed. HTTP status: $code" >> "$GITHUB_OUTPUT"
+
+          exit 1
+
+      - name: Setup Node.js
+        if: always()
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install EmailJS
+        if: always()
+        run: npm install --no-save @emailjs/nodejs
+
+      - name: Send email notification
+        if: always()
+        env:
+          EMAILJS_SERVICE_ID: ${{ secrets.EMAILJS_SERVICE_ID }}
+          EMAILJS_TEMPLATE_ID: ${{ secrets.EMAILJS_TEMPLATE_ID }}
+          EMAILJS_PUBLIC_KEY: ${{ secrets.EMAILJS_PUBLIC_KEY }}
+          EMAILJS_PRIVATE_KEY: ${{ secrets.EMAILJS_PRIVATE_KEY }}
+
+          STATUS: ${{ steps.database.outputs.status }}
+          DETAILS: ${{ steps.database.outputs.details }}
+
+          NAME_OF_GITHUB_REPOSITORY: ${{ github.repository }}
+
+        run: |
+          node <<'EOF'
+          const emailjs = require("@emailjs/nodejs");
+
+          async function sendEmail() {
+            const status = process.env.STATUS || "FAILED";
+
+            const response = await emailjs.send(
+              process.env.EMAILJS_SERVICE_ID,
+              process.env.EMAILJS_TEMPLATE_ID,
+              {
+                status,
+
+                status_color: status === "SUCCESS"
+                  ? "#16a34a"
+                  : "#dc2626",
+
+                message: status === "SUCCESS"
+                  ? "Supabase database is active."
+                  : "Supabase database activity check failed.",
+
+                project_name: "Supabase",
+                workflow_name: "Supabase Keep Alive",
+
+                execution_time: new Date().toLocaleString("en-IN", {
+                  timeZone: "Asia/Kolkata"
+                }),
+
+                details: process.env.DETAILS,
+
+                workflow_url:
+                  `https://github.com/${process.env.NAME_OF_GITHUB_REPOSITORY}/actions`
+              },
+              {
+                publicKey: process.env.EMAILJS_PUBLIC_KEY,
+                privateKey: process.env.EMAILJS_PRIVATE_KEY
+              }
+            );
+
+            console.log("Email sent:", response.status);
+          }
+
+          sendEmail().catch(error => {
+            console.error("Failed to send email:", error);
+            process.exit(1);
+          });
+          
